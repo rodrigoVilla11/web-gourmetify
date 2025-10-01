@@ -16,7 +16,7 @@ export interface UserSummary {
 
 export interface UserDetail extends UserSummary {
   updatedAt?: string; // solo en findOne / update
-  tenantId?: string;  // solo en create (según tu select)
+  tenantId?: string; // solo en create (según tu select)
 }
 
 /** === DTOs controller/service === */
@@ -59,7 +59,20 @@ export const usersApi = baseApi.injectEndpoints({
             ]
           : [{ type: "Users", id: "LIST" }],
     }),
-
+    listUsersAdmin: build.query<UserSummary[], TenantArg | void>({
+      query: (arg) => {
+        const tenantId = (arg as TenantArg | undefined)?.tenantId;
+        const qs = tenantId ? `?tenantId=${tenantId}` : "";
+        return { url: `/users/admin${qs}` };
+      },
+      providesTags: (result) =>
+        result
+          ? [
+              ...result.map((u) => ({ type: "Users" as const, id: u.id })),
+              { type: "Users", id: "LIST" },
+            ]
+          : [{ type: "Users", id: "LIST" }],
+    }),
     /** GET /users/:id */
     getUserById: build.query<UserDetail, { id: string } & TenantArg>({
       query: ({ id, tenantId }) => {
@@ -71,17 +84,32 @@ export const usersApi = baseApi.injectEndpoints({
     }),
 
     /** POST /users */
-    createUser: build.mutation<UserDetail, { data: CreateUserDto } & TenantArg>({
-      query: ({ data, tenantId }) => {
-        const headers: Record<string, string> = {};
-        if (tenantId) headers["x-tenant-id"] = tenantId;
-        return { url: "/users", method: "POST", body: data, headers };
-      },
+    createUser: build.mutation<UserDetail, { data: CreateUserDto } & TenantArg>(
+      {
+        query: ({ data, tenantId }) => {
+          const headers: Record<string, string> = {};
+          if (tenantId) headers["x-tenant-id"] = tenantId;
+          return { url: "/users", method: "POST", body: data, headers };
+        },
+        invalidatesTags: [{ type: "Users", id: "LIST" }],
+      }
+    ),
+    createUserAdmin: build.mutation<
+      UserDetail,
+      { tenantId: string; data: CreateUserDto }
+    >({
+      query: ({ tenantId, data }) => ({
+        url: `/users/admin?tenantId=${tenantId}`,
+        method: "POST",
+        body: data,
+      }),
       invalidatesTags: [{ type: "Users", id: "LIST" }],
     }),
-
     /** PATCH /users/:id */
-    updateUser: build.mutation<UserDetail, { id: string; data: UpdateUserDto } & TenantArg>({
+    updateUser: build.mutation<
+      UserDetail,
+      { id: string; data: UpdateUserDto } & TenantArg
+    >({
       query: ({ id, data, tenantId }) => {
         const headers: Record<string, string> = {};
         if (tenantId) headers["x-tenant-id"] = tenantId;
@@ -111,8 +139,10 @@ export const usersApi = baseApi.injectEndpoints({
 
 export const {
   useListUsersQuery,
+  useListUsersAdminQuery,
   useGetUserByIdQuery,
   useCreateUserMutation,
+  useCreateUserAdminMutation,
   useUpdateUserMutation,
   useDeleteUserMutation,
 } = usersApi;

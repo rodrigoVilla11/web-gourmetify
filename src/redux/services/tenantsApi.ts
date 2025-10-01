@@ -1,8 +1,8 @@
 import { baseApi } from "./baseApi";
 
 /** ===== Enums según tu DTO ===== */
-export type TenantPlan = "FREE" | "BASIC" | "PRO" | "ENTERPRISE" | string;
-export type TenantStatus = "ACTIVE" | "SUSPENDED" | "CANCELLED" | string;
+export type TenantPlan = "FREE" | "PRO" | "ENTERPRISE" | string;
+export type TenantStatus = "ACTIVE" | "INACTIVE" | string;
 
 /** ===== Model ===== */
 export interface Tenant {

@@ -17,11 +17,11 @@ export default function PublicHomePage() {
         </p>
 
         <div className="flex flex-wrap gap-4 justify-center">
-                 <Link
+          <Link
             href="/login"
             className="px-5 py-2 rounded-lg border border-zinc-300 bg-white hover:bg-zinc-50 transition"
           >
-            Ingresar
+            Ingresar como tenant
           </Link>
         </div>
       </section>

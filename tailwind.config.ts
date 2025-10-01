@@ -1,26 +1,32 @@
+// tailwind.config.ts
 import type { Config } from "tailwindcss";
 
 export default {
-  darkMode: ["class"],
-  content: [
-    "./src/pages/**/*.{ts,tsx}",
-    "./src/components/**/*.{ts,tsx}",
-    "./src/app/**/*.{ts,tsx}",
-  ],
+  content: ["./src/**/*.{ts,tsx}"],
   theme: {
     extend: {
-      container: { center: true, padding: "1rem" },
       colors: {
-        border: "hsl(214.3 31.8% 91.4%)",
-        background: "hsl(0 0% 100%)",
-        foreground: "hsl(222.2 84% 4.9%)",
+        brand: {
+          DEFAULT: "#144336",
+          600: "#144336",
+          700: "#10372C",
+        },
+        accent: {
+          DEFAULT: "#FBBF24", // amarillo
+          600: "#F59E0B",
+        },
+      },
+      fontFamily: {
+        display: ["'Albert Sans'", "Montserrat", "Inter", "system-ui", "sans-serif"],
+        sans: ["Inter", "system-ui", "sans-serif"],
+      },
+      boxShadow: {
+        card: "0 1px 2px rgba(0,0,0,0.06), 0 4px 12px rgba(0,0,0,0.06)",
       },
       borderRadius: {
-        lg: "var(--radius)",
-        md: "calc(var(--radius) - 2px)",
-        sm: "calc(var(--radius) - 4px)",
+        xl: "0.75rem",
       },
     },
   },
-  plugins: [require("@tailwindcss/forms")],
+  plugins: [],
 } satisfies Config;
