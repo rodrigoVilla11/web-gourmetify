@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
+import { useSelector } from "react-redux";
+import { skipToken } from "@reduxjs/toolkit/query";
 import {
   Users,
   UserPlus,
@@ -13,22 +15,31 @@ import {
   CheckCircle2,
   XCircle,
 } from "lucide-react";
-import { getTenantId } from "@/redux/services/baseApi";
 import {
   useListUsersQuery,
   useCreateUserMutation,
   UserRole,
   // useUpdateUserMutation, // ← descomenta si tenés este endpoint
 } from "@/redux/services/usersApi";
+import {
+  selectAuthTenantId,
+  selectIsAuthenticated,
+} from "@/redux/slices/authSlices";
 
 // ================================
 // Page
 // ================================
 export default function TenantUsersPage() {
-  const tenantId = getTenantId()!;
+  const tenantId = useSelector(selectAuthTenantId);
+  const isAuthenticated = useSelector(selectIsAuthenticated);
 
   // data
-  const { data: users = [], isLoading, isError, refetch } = useListUsersQuery({ tenantId });
+  const {
+    data: users = [],
+    isLoading,
+    isError,
+    refetch,
+  } = useListUsersQuery(tenantId ? { tenantId } : skipToken);
   const [createUser, { isLoading: creating }] = useCreateUserMutation();
   // const [updateUser] = useUpdateUserMutation();
 
@@ -49,19 +60,39 @@ export default function TenantUsersPage() {
     if (!q.trim()) return users;
     const s = q.toLowerCase();
     return users.filter((u) =>
-      [u.name, u.email, u.role]?.some((x) => String(x ?? "").toLowerCase().includes(s))
+      [u.name, u.email, u.role]?.some((x) =>
+        String(x ?? "")
+          .toLowerCase()
+          .includes(s)
+      )
     );
   }, [users, q]);
 
   // create handler
   const handleCreate = async () => {
     setErrMsg(null);
+    if (!tenantId) {
+      setErrMsg(
+        isAuthenticated
+          ? "No hay un tenant seleccionado en la sesión actual."
+          : "Tu sesión no está activa. Iniciá sesión nuevamente."
+      );
+      return;
+    }
     if (!name.trim() || !email.trim() || !password.trim()) {
       setErrMsg("Completá nombre, email y contraseña.");
       return;
     }
     try {
-      await createUser({ tenantId, data: { name: name.trim(), email: email.trim().toLowerCase(), password, role } }).unwrap();
+      await createUser({
+        tenantId,
+        data: {
+          name: name.trim(),
+          email: email.trim().toLowerCase(),
+          password,
+          role,
+        },
+      }).unwrap();
       setName("");
       setEmail("");
       setPassword("");
@@ -79,13 +110,40 @@ export default function TenantUsersPage() {
   //   } catch {}
   // };
 
+  if (!tenantId) {
+    return (
+      <div className="space-y-6">
+        <header className="flex items-start justify-between gap-4">
+          <div className="space-y-1">
+            <h1 className="text-3xl font-black tracking-tight text-[#144336]">
+              Usuarios
+            </h1>
+            <p className="text-sm text-zinc-600">
+              Gestioná colaboradores, roles y accesos.
+            </p>
+          </div>
+        </header>
+
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          {isAuthenticated
+            ? "Tu sesión no tiene un tenant asociado. Ingresá nuevamente o consultá a un administrador."
+            : "Necesitás iniciar sesión para gestionar usuarios."}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8">
       {/* Header */}
       <header className="flex items-start justify-between gap-4">
         <div className="space-y-1">
-          <h1 className="text-3xl font-black tracking-tight text-[#144336]">Usuarios</h1>
-          <p className="text-sm text-zinc-600">Gestioná colaboradores, roles y accesos.</p>
+          <h1 className="text-3xl font-black tracking-tight text-[#144336]">
+            Usuarios
+          </h1>
+          <p className="text-sm text-zinc-600">
+            Gestioná colaboradores, roles y accesos.
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <Link
@@ -137,7 +195,10 @@ export default function TenantUsersPage() {
       {/* Toolbar */}
       <section className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="relative w-full sm:max-w-sm">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" aria-hidden />
+          <Search
+            className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400"
+            aria-hidden
+          />
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
@@ -146,17 +207,41 @@ export default function TenantUsersPage() {
             aria-label="Buscar usuarios"
           />
         </div>
-        <span className="text-xs text-zinc-500">{filtered.length} resultados</span>
+        <span className="text-xs text-zinc-500">
+          {filtered.length} resultados
+        </span>
       </section>
 
       {/* Create panel */}
       {showForm && (
         <section className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[1fr,1fr,1fr,auto]">
-            <LabeledInput label="Nombre" value={name} onChange={setName} placeholder="Ej. Juana Pérez" />
-            <LabeledInput label="Email" value={email} onChange={setEmail} placeholder="ejemplo@correo.com" type="email" />
-            <LabeledInput label="Contraseña" value={password} onChange={setPassword} type="password" placeholder="••••••••" />
-            <LabeledSelect label="Rol" value={role} onChange={(v) => setRole(v as UserRole)} options={roleOptions} />
+            <LabeledInput
+              label="Nombre"
+              value={name}
+              onChange={setName}
+              placeholder="Ej. Juana Pérez"
+            />
+            <LabeledInput
+              label="Email"
+              value={email}
+              onChange={setEmail}
+              placeholder="ejemplo@correo.com"
+              type="email"
+            />
+            <LabeledInput
+              label="Contraseña"
+              value={password}
+              onChange={setPassword}
+              type="password"
+              placeholder="••••••••"
+            />
+            <LabeledSelect
+              label="Rol"
+              value={role}
+              onChange={(v) => setRole(v as UserRole)}
+              options={roleOptions}
+            />
           </div>
           {errMsg && <p className="mt-2 text-sm text-red-600">{errMsg}</p>}
           <div className="mt-3 flex items-center gap-2">
@@ -165,7 +250,11 @@ export default function TenantUsersPage() {
               disabled={creating}
               className="inline-flex items-center gap-2 rounded-xl bg-[#144336] px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:opacity-95 disabled:opacity-60"
             >
-              {creating ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <UserPlus className="h-4 w-4" aria-hidden />}
+              {creating ? (
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+              ) : (
+                <UserPlus className="h-4 w-4" aria-hidden />
+              )}
               {creating ? "Creando…" : "Crear usuario"}
             </button>
             <button
@@ -182,23 +271,35 @@ export default function TenantUsersPage() {
       <section className="rounded-2xl border border-zinc-200 bg-white shadow-sm">
         <header className="flex items-center justify-between gap-2 border-b px-4 py-3">
           <span className="text-sm font-semibold text-[#144336]">Listado</span>
-          <button onClick={() => refetch()} className="text-xs text-zinc-500 hover:text-[#144336]">Actualizar</button>
+          <button
+            onClick={() => refetch()}
+            className="text-xs text-zinc-500 hover:text-[#144336]"
+          >
+            Actualizar
+          </button>
         </header>
 
         {isLoading ? (
           <ListSkeleton />
         ) : isError ? (
-          <div className="p-6 text-sm text-red-600">No se pudo cargar la lista.</div>
+          <div className="p-6 text-sm text-red-600">
+            No se pudo cargar la lista.
+          </div>
         ) : filtered.length === 0 ? (
           <EmptyState onNew={() => setShowForm(true)} />
         ) : (
           <ul className="divide-y">
             {filtered.map((u) => (
-              <li key={u.id} className="flex items-center justify-between gap-3 px-4 py-3">
+              <li
+                key={u.id}
+                className="flex items-center justify-between gap-3 px-4 py-3"
+              >
                 <div className="flex min-w-0 items-center gap-3">
                   <Avatar name={u.name} />
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-[#144336]">{u.name}</p>
+                    <p className="truncate text-sm font-medium text-[#144336]">
+                      {u.name}
+                    </p>
                     <p className="truncate text-xs text-zinc-500">{u.email}</p>
                   </div>
                 </div>
@@ -228,13 +329,11 @@ type UserLite = {
   isActive: boolean;
 };
 
-
 const roleOptions: { label: string; value: UserRole }[] = [
   { label: "Admin", value: "ADMIN" },
   { label: "Manager", value: "MANAGER" },
   { label: "Cashier", value: "CASHIER" },
   { label: "Waiter", value: "WAITER" },
-
 ];
 
 function uniqueRolesCount(users: UserLite[]) {
@@ -262,23 +361,34 @@ function MetricCard({
 }) {
   return (
     <div className="relative overflow-hidden rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm transition hover:shadow-md">
-      <div className={`absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${accent}`} aria-hidden />
+      <div
+        className={`absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${accent}`}
+        aria-hidden
+      />
       <div className="flex items-start justify-between gap-4">
         <div>
           <p className="text-sm font-medium text-zinc-500">{title}</p>
-          <div className="mt-2 flex items-center gap-3" aria-live={isLoading ? "polite" : undefined}>
+          <div
+            className="mt-2 flex items-center gap-3"
+            aria-live={isLoading ? "polite" : undefined}
+          >
             {isLoading ? (
               <span className="inline-flex items-center gap-2 text-sm font-medium text-zinc-500">
                 <Loader2 aria-hidden className="h-4 w-4 animate-spin" />
                 Cargando
               </span>
             ) : (
-              <span className="text-3xl font-extrabold text-[#144336]">{typeof value === "number" ? value.toLocaleString() : "—"}</span>
+              <span className="text-3xl font-extrabold text-[#144336]">
+                {typeof value === "number" ? value.toLocaleString() : "—"}
+              </span>
             )}
           </div>
           {hint && <p className="mt-2 text-xs text-zinc-500">{hint}</p>}
         </div>
-        <span className="rounded-full bg-[#144336]/10 p-2 text-[#144336]" aria-hidden>
+        <span
+          className="rounded-full bg-[#144336]/10 p-2 text-[#144336]"
+          aria-hidden
+        >
           <Icon className="h-5 w-5" />
         </span>
       </div>
@@ -286,7 +396,13 @@ function MetricCard({
   );
 }
 
-function LabeledInput({ label, value, onChange, type = "text", placeholder }: {
+function LabeledInput({
+  label,
+  value,
+  onChange,
+  type = "text",
+  placeholder,
+}: {
   label: string;
   value: string;
   onChange: (v: string) => void;
@@ -309,7 +425,12 @@ function LabeledInput({ label, value, onChange, type = "text", placeholder }: {
   );
 }
 
-function LabeledSelect({ label, value, onChange, options }: {
+function LabeledSelect({
+  label,
+  value,
+  onChange,
+  options,
+}: {
   label: string;
   value: string;
   onChange: (v: string) => void;
@@ -342,7 +463,13 @@ function RoleBadge({ role }: { role: UserRole }) {
     MANAGER: "bg-amber-100 text-amber-700",
     STAFF: "bg-emerald-100 text-emerald-700",
   };
-  return <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${map[role]}`}>{role}</span>;
+  return (
+    <span
+      className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${map[role]}`}
+    >
+      {role}
+    </span>
+  );
 }
 
 function StatusPill({ active }: { active: boolean }) {
@@ -352,7 +479,11 @@ function StatusPill({ active }: { active: boolean }) {
         active ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"
       }`}
     >
-      {active ? <CheckCircle2 className="h-3.5 w-3.5" /> : <XCircle className="h-3.5 w-3.5" />}
+      {active ? (
+        <CheckCircle2 className="h-3.5 w-3.5" />
+      ) : (
+        <XCircle className="h-3.5 w-3.5" />
+      )}
       {active ? "Activo" : "Inactivo"}
     </span>
   );
@@ -379,7 +510,8 @@ function EmptyState({ onNew }: { onNew: () => void }) {
         <Users className="h-8 w-8 text-zinc-400" aria-hidden />
       </div>
       <p className="max-w-sm text-sm text-zinc-600">
-        Aún no hay usuarios con este filtro. Creá tu primer usuario o ajustá la búsqueda.
+        Aún no hay usuarios con este filtro. Creá tu primer usuario o ajustá la
+        búsqueda.
       </p>
       <button
         onClick={onNew}
@@ -396,7 +528,10 @@ function ListSkeleton() {
   return (
     <ul className="divide-y">
       {Array.from({ length: 6 }).map((_, i) => (
-        <li key={i} className="flex items-center justify-between gap-3 px-4 py-3">
+        <li
+          key={i}
+          className="flex items-center justify-between gap-3 px-4 py-3"
+        >
           <div className="flex items-center gap-3">
             <div className="h-8 w-8 animate-pulse rounded-full bg-zinc-200" />
             <div className="space-y-2">

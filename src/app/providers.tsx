@@ -17,9 +17,9 @@ import { useMeQuery } from "@/redux/services/authApi";
 
 function BootstrapAuth() {
   const dispatch = useDispatch();
-
   const token = useSelector(selectAuthToken);
 
+  // Ejecuta /auth/me solo si hay token
   useMeQuery(token ? undefined : skipToken);
 
   useEffect(() => {

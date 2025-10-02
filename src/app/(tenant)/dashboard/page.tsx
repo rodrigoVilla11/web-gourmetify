@@ -2,8 +2,13 @@
 "use client";
 
 import Link from "next/link";
+import { useSelector } from "react-redux";
+import { skipToken } from "@reduxjs/toolkit/query";
 import { useListUsersQuery } from "@/redux/services/usersApi";
-import { getTenantId } from "@/redux/services/baseApi";
+import {
+  selectAuthTenantId,
+  selectIsAuthenticated,
+} from "@/redux/slices/authSlices";
 import type { LucideIcon } from "lucide-react";
 import {
   ArrowUpRight,
@@ -17,8 +22,32 @@ import {
 } from "lucide-react";
 
 export default function TenantDashboardPage() {
-  const tenantId = getTenantId()!;
-  const { data: users, isLoading } = useListUsersQuery({ tenantId });
+  const tenantId = useSelector(selectAuthTenantId);
+  const isAuthenticated = useSelector(selectIsAuthenticated);
+  const { data: users = [], isLoading } = useListUsersQuery(
+    tenantId ? { tenantId } : skipToken
+  );
+
+  if (!tenantId) {
+    return (
+      <div className="space-y-6">
+        <header className="space-y-2">
+          <h1 className="text-3xl font-black tracking-tight text-[#144336]">
+            Dashboard
+          </h1>
+          <p className="text-sm text-zinc-600">
+            Visualizá el pulso general de tu organización.
+          </p>
+        </header>
+
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          {isAuthenticated
+            ? "Tu sesión no tiene un tenant seleccionado. Ingresá nuevamente o contactá a un administrador."
+            : "Necesitás iniciar sesión para acceder al dashboard."}
+        </div>
+      </div>
+    );
+  }
   const metrics: MetricCardProps[] = [
     {
       title: "Usuarios",

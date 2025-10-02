@@ -1,18 +1,20 @@
 // src/redux/services/authApi.ts
-import { baseApi } from "./baseApi";
+import { baseApi, getBranchId, getTenantId, getUserRole } from "./baseApi";
 import {
   clearAuthAll,
   getAuthToken,
-  getBranchId,
-  getTenantId,
-  getUserRole,
   setAuthToken,
   setAuthUser,
   setBranchId,
   setTenantId,
 } from "@/redux/services/baseApi";
-import { clearSession, setSession, type AuthSession } from "@/redux/slices/authSlices";
-import type { AuthUser, UserRole } from "@/types/auth";
+import {
+  clearSession,
+  setSession,
+  type AuthSession,
+} from "@/redux/slices/authSlices";
+import type { AuthUser } from "@/types/auth";
+import { normalizeAuthSession, normalizeAuthUser } from "@/utils/authNormalize";
 
 export interface LoginDto {
   email: string;
@@ -32,7 +34,7 @@ export interface AuthResponse {
     role?: string;
   } | null;
 }
-interface RawMeResponse {
+export interface RawMeResponse {
   id?: string;
   email?: string;
   name?: string;
@@ -49,63 +51,15 @@ interface RawMeResponse {
   } | null;
 }
 
-const normalizeAuthUser = (data: RawMeResponse): AuthUser => {
-  const nested = data.user ?? undefined;
-  const id = (data.id ?? nested?.id) as string;
-  const email = (data.email ?? nested?.email) as string;
-  const name = data.name ?? nested?.name;
-  const tenantId = data.tenantId ?? nested?.tenantId ?? null;
-  const branchId = data.branchId ?? nested?.branchId ?? null;
-  const role = (data.role ?? nested?.role) as UserRole | undefined;
-
-  return {
-    id,
-    email,
-    name,
-    role,
-    tenantId,
-    branchId,
-  };
-};
-
-const normalizeAuthSession = (payload: AuthResponse): AuthSession => {
-  const roleFromResponse = (payload.role as UserRole | undefined) ?? undefined;
-  const user: AuthUser | null = payload.user
-    ? {
-        id: payload.user.id,
-        email: payload.user.email,
-        name: payload.user.name,
-        tenantId: payload.user.tenantId ?? payload.tenantId ?? null,
-        branchId: payload.user.branchId ?? null,
-        role:
-          roleFromResponse ??
-          (payload.user.role as UserRole | undefined) ??
-          undefined,
-      }
-    : null;
-
-  const role: UserRole | null = user?.role ?? roleFromResponse ?? null;
-
-  return {
-    token: payload.access_token ?? null,
-    tenantId: payload.tenantId ?? user?.tenantId ?? null,
-    branchId: user?.branchId ?? null,
-    role,
-    user,
-    flags: {},
-  };
-};
 
 export const authApi = baseApi.injectEndpoints({
   endpoints: (build) => ({
-    login: build.mutation<AuthSession, LoginDto>({
-      query: (body) => ({
-        url: "/auth/login",
-        method: "POST",
-        body,
-      }),
-      transformResponse: (response: AuthResponse): AuthSession =>
-        normalizeAuthSession(response),
+    login: build.mutation<AuthSession, { email: string; password: string }>({
+      query: (body) => ({ url: "/auth/login", method: "POST", body }),
+      transformResponse: (response: unknown): AuthSession => {
+        // cualquier shape → normalizador robusto
+        return normalizeAuthSession(response);
+      },
       async onQueryStarted(_, { dispatch, queryFulfilled }) {
         try {
           const { data } = await queryFulfilled;
@@ -123,13 +77,15 @@ export const authApi = baseApi.injectEndpoints({
     }),
 
     me: build.query<AuthUser, void>({
-      // Endpoint protegido que devuelve el usuario actual ya normalizado
       query: () => ({ url: "/auth/me" }),
-      // Opcional: transformar la respuesta del backend a nuestro AuthUser
-     transformResponse: (data: RawMeResponse): AuthUser => normalizeAuthUser(data),
+      transformResponse: (raw: unknown): AuthUser => {
+        // ⚠️ si backend responde null/204/shape raro, esto throws y RTKQ tratará como error
+        return normalizeAuthUser(raw);
+      },
       async onQueryStarted(_, { dispatch, queryFulfilled }) {
         try {
           const { data } = await queryFulfilled;
+
           const tenantId = data.tenantId ?? getTenantId() ?? null;
           const branchId = data.branchId ?? getBranchId() ?? null;
           const role = data.role ?? getUserRole() ?? null;
@@ -146,6 +102,7 @@ export const authApi = baseApi.injectEndpoints({
             user: data,
           }));
         } catch (error) {
+          // si normalize tiró error, consideramos sesión inválida
           clearAuthAll();
           dispatch(clearSession());
           throw error;
@@ -153,15 +110,8 @@ export const authApi = baseApi.injectEndpoints({
       },
     }),
 
-    changePassword: build.mutation<
-      { ok: true },
-      { currentPassword: string; newPassword: string }
-    >({
-      query: (body) => ({
-        url: "/auth/change-password",
-        method: "PATCH",
-        body,
-      }),
+    changePassword: build.mutation<{ ok: true }, { currentPassword: string; newPassword: string }>({
+      query: (body) => ({ url: "/auth/change-password", method: "PATCH", body }),
     }),
   }),
   overrideExisting: false,

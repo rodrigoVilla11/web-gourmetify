@@ -1,21 +1,43 @@
+// src/components/auth/RoleGuard.tsx
 "use client";
 import { ReactNode, useMemo } from "react";
 import { useSelector } from "react-redux";
-import { selectSession } from "@/redux/slices/authSlices";
+import {
+  selectSession,
+  selectAuthLoading,
+  selectEffectiveRole,
+} from "@/redux/slices/authSlices";
+import type { UserRole } from "@/types/auth";
 
-type Props = { allow: string[]; children: ReactNode };
-
-export default function RoleGuard({ allow, children }: Props) {
+export default function RoleGuard({
+  allow,
+  children,
+}: {
+  allow: UserRole[];
+  children: ReactNode;
+}) {
   const session = useSelector(selectSession);
-  const user = session.user;
-  const role = session.role ?? user?.role ?? null;
+  const loading = useSelector(selectAuthLoading);
+  const effectiveRole = useSelector(selectEffectiveRole); // 👈 usa override si existe
 
-  const ok = useMemo(() => !!role && allow.includes(role), [role, allow]);
-  if (!user) {
-    return <div className="p-6">Necesitás iniciar sesión.</div>;
-  }
-  if (!ok) {
-    return <div className="p-6">No tenés permisos para ver esta sección.</div>;
-  }
+  const token = session.token;
+  const user = session.user;
+
+  const bootstrapping = Boolean(token && !user);
+  const ok = useMemo(
+    () => !!effectiveRole && allow.includes(effectiveRole),
+    [effectiveRole, allow]
+  );
+
+  if (loading || bootstrapping)
+    return <div className="p-6 text-gray-500">Cargando sesión…</div>;
+  if (!token)
+    return <div className="p-6 text-red-600">Necesitás iniciar sesión.</div>;
+  if (!ok)
+    return (
+      <div className="p-6 text-orange-600">
+        No tenés permisos para ver esta sección.
+      </div>
+    );
   return <>{children}</>;
 }

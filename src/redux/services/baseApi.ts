@@ -1,19 +1,28 @@
-import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
+import {
+  BaseQueryFn,
+  createApi,
+  FetchArgs,
+  fetchBaseQuery,
+  FetchBaseQueryError,
+} from "@reduxjs/toolkit/query/react";
 import type { AuthUser } from "@/types/auth";
 
 const isBrowser = typeof window !== "undefined";
 
 // ==== Claves locales (UNIFICADAS) ====
-const TENANT_KEY = "x-tenant-id";
-const BRANCH_KEY = "x-branch-id";
-const TOKEN_KEY = "token";
-const USER_KEY = "authUser"; // 👈 unificado
+const NS = "gourmetify";
+const TENANT_KEY = `${NS}.ctx.tenant`;
+const BRANCH_KEY = `${NS}.ctx.branch`;
+const TOKEN_KEY = `${NS}.auth.token`;
+const USER_KEY  = `${NS}.auth.user`;
 
 // Evento custom para notificar cambios locales en la misma pestaña
 export const AUTH_EVENT = "auth:changed";
+
 const broadcastAuthChange = () => {
   if (!isBrowser) return;
   window.dispatchEvent(new Event(AUTH_EVENT));
+  channel?.postMessage({ type: "AUTH_CHANGED", ts: Date.now() });
 };
 
 // Lectura SSR-safe
@@ -24,29 +33,56 @@ const getLocal = (k: string) =>
 const DEFAULT_TENANT = process.env.NEXT_PUBLIC_TENANT_ID || null;
 const DEFAULT_BRANCH = process.env.NEXT_PUBLIC_DEFAULT_BRANCH_ID || null;
 
+// arriba del archivo
+const channel = isBrowser ? new BroadcastChannel("auth") : null;
+
+if (isBrowser) {
+  channel?.addEventListener("message", (e) => {
+    if (e.data?.type === "AUTH_CHANGED") {
+      window.dispatchEvent(new Event(AUTH_EVENT));
+    }
+  });
+}
+const rawBaseQuery = fetchBaseQuery({
+  baseUrl: process.env.NEXT_PUBLIC_API_URL!,
+  credentials: "include",
+  prepareHeaders: (headers) => {
+    const token = getLocal(TOKEN_KEY);
+    if (token) headers.set("authorization", `Bearer ${token}`);
+    const tenantId = getLocal(TENANT_KEY) || DEFAULT_TENANT || undefined;
+    if (tenantId) headers.set("x-tenant-id", tenantId);
+    const branchId = getLocal(BRANCH_KEY) || DEFAULT_BRANCH || undefined;
+    if (branchId) headers.set("x-branch-id", branchId);
+    return headers;
+  },
+});
+
+const baseQueryWithReauth: BaseQueryFn<
+  string | FetchArgs,
+  unknown,
+  FetchBaseQueryError
+> = async (args, api, extraOptions) => {
+  let result = await rawBaseQuery(args, api, extraOptions);
+  if (result.error && result.error.status === 401) {
+    // intentar refresh
+    const refresh = await rawBaseQuery(
+      { url: "/auth/refresh", method: "POST" },
+      api,
+      extraOptions
+    );
+    if (refresh.data && (refresh.data as any).token) {
+      setAuthToken((refresh.data as any).token);
+      result = await rawBaseQuery(args, api, extraOptions); // reintento
+    } else {
+      clearAuthAll(); // limpiar todo
+    }
+  }
+  return result;
+};
+
 export const baseApi = createApi({
   reducerPath: "api",
-  baseQuery: fetchBaseQuery({
-    baseUrl: process.env.NEXT_PUBLIC_API_URL!, // asegurate que exista
-    credentials: "include",
-    prepareHeaders: (headers) => {
-      // 1) Auth header
-      const token = getLocal(TOKEN_KEY);
-      if (token) headers.set("authorization", `Bearer ${token}`);
-
-      // 2) Tenant/Branch por defecto si no vienen
-      if (!headers.has("x-tenant-id")) {
-        const tenantId = getLocal(TENANT_KEY) || DEFAULT_TENANT || undefined;
-        if (tenantId) headers.set("x-tenant-id", tenantId);
-      }
-      if (!headers.has("x-branch-id")) {
-        const branchId = getLocal(BRANCH_KEY) || DEFAULT_BRANCH || undefined;
-        if (branchId) headers.set("x-branch-id", branchId);
-      }
-
-      return headers;
-    },
-  }),
+  baseQuery: baseQueryWithReauth,
   tagTypes: [
     "Customers",
     "Branches",
@@ -130,7 +166,16 @@ export function getAuthUser(): AuthUser | null {
   const raw = getLocal(USER_KEY);
   if (!raw) return null;
   try {
-    return JSON.parse(raw) as AuthUser;
+    const u = JSON.parse(raw) as Partial<AuthUser>;
+    if (!u || typeof u !== "object" || !u.id) return null;
+    return {
+      id: String(u.id),
+      name: String(u.name ?? ""),
+      email: String(u.email ?? "").toLowerCase(),
+      role: (u.role as AuthUser["role"]) ?? "WAITER",
+      branchId: u.branchId ?? null,
+      tenantId: u.tenantId ?? null,
+    } as AuthUser;
   } catch {
     return null;
   }
@@ -140,7 +185,6 @@ export function getUserRole(): AuthUser["role"] | null {
   const user = getAuthUser();
   return user?.role ?? null;
 }
-
 
 /* ======================
    Conveniencia

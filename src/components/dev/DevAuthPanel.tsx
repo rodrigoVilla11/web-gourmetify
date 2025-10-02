@@ -4,47 +4,49 @@
 import { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import type { UserRole } from "@/types/auth";
-import { getAuthUser, setAuthUser, AUTH_EVENT } from "@/redux/services/baseApi";
+import { getAuthUser, AUTH_EVENT } from "@/redux/services/baseApi";
 import {
-  setSession,
-  clearSession,
   selectAuthUser,
-  selectAuthRole,
   selectAuthTenantId,
   selectAuthBranchId,
+  selectEffectiveRole,
+  setDevRoleOverride,
+  clearDevRoleOverride,
 } from "@/redux/slices/authSlices";
 
 const roleOptions: UserRole[] = ["SUPER_ADMIN", "ADMIN", "MANAGER", "CASHIER", "WAITER"];
 
+// clave local para persistir override
+const OVERRIDE_KEY = "gourmetify.dev.roleOverride";
+
 export default function DevRoleSwitcher() {
   const dispatch = useDispatch();
 
-  // selectors del slice nuevo
   const user = useSelector(selectAuthUser);
-  const role = useSelector(selectAuthRole);
+  const role = useSelector(selectEffectiveRole); // 👈 rol efectivo (override > session)
   const tenantId = useSelector(selectAuthTenantId);
   const branchId = useSelector(selectAuthBranchId);
 
   const [open, setOpen] = useState(false);
 
-  // Sincroniza Redux <= localStorage (authUser) en arranque y ante cambios (storage/AUTH_EVENT/focus/visibility)
+  // Bootstrap: leer override de localStorage y setear en Redux
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(OVERRIDE_KEY);
+      const r = raw ? (JSON.parse(raw) as UserRole | null) : null;
+      dispatch(setDevRoleOverride(r ?? null));
+    } catch { /* noop */ }
+  }, [dispatch]);
+
+  // Sync multi-pestaña + eventos locales
   useEffect(() => {
     const sync = () => {
-      const u = getAuthUser();
-      if (u) {
-        dispatch(
-          setSession({
-            user: u,
-            role: u.role ?? null,
-            tenantId: u.tenantId ?? null,
-            branchId: u.branchId ?? null,
-          })
-        );
-      } else {
-        dispatch(clearSession());
-      }
+      try {
+        const raw = localStorage.getItem(OVERRIDE_KEY);
+        const r = raw ? (JSON.parse(raw) as UserRole | null) : null;
+        dispatch(setDevRoleOverride(r ?? null));
+      } catch { /* noop */ }
     };
-    sync();
     window.addEventListener("storage", sync);
     window.addEventListener(AUTH_EVENT, sync as EventListener);
     window.addEventListener("focus", sync);
@@ -66,17 +68,13 @@ export default function DevRoleSwitcher() {
     return parts.join(" · ");
   }, [user, role, tenantId, branchId]);
 
-  // SOLO cambia el role dentro de authUser y refleja inmediato en Redux
-  const setRoleOnly = (r: UserRole) => {
-    const u = getAuthUser();
-    if (!u) return;
-    const updated = { ...u, role: r };
-
-    // 1) Persistencia + broadcast (AUTH_EVENT) => otras pestañas se sincronizan
-    setAuthUser(updated);
-
-    // 2) Actualización inmediata de UI en esta pestaña (sin tocar token/tenant/branch)
-    dispatch(setSession({ user: updated, role: r }));
+  // Setea override SOLO en dev (no toca session ni user)
+  const setOverride = (r: UserRole | null) => {
+    try {
+      if (r) localStorage.setItem(OVERRIDE_KEY, JSON.stringify(r));
+      else localStorage.removeItem(OVERRIDE_KEY);
+    } catch { /* noop */ }
+    dispatch(setDevRoleOverride(r));
   };
 
   return (
@@ -84,12 +82,8 @@ export default function DevRoleSwitcher() {
       {open && (
         <div className="border rounded-lg bg-white shadow p-3 text-xs space-y-3 w-[360px]">
           <div className="flex items-center justify-between">
-            <div className="font-medium">Dev: Role</div>
-            <button
-              className="text-zinc-500 hover:text-zinc-800"
-              onClick={() => setOpen(false)}
-              title="Cerrar"
-            >
+            <div className="font-medium">Dev: Role override</div>
+            <button className="text-zinc-500 hover:text-zinc-800" onClick={() => setOpen(false)} title="Cerrar">
               ×
             </button>
           </div>
@@ -98,20 +92,31 @@ export default function DevRoleSwitcher() {
             <div className="text-zinc-500">Actual</div>
             <div className="text-sm">{currentInfo}</div>
 
-            <div className="text-zinc-500 mt-2">Cambiar rol</div>
+            <div className="text-zinc-500 mt-2">Cambiar rol (override local)</div>
             <div className="flex flex-wrap gap-1">
               {roleOptions.map((r) => (
                 <button
                   key={r}
-                  onClick={() => setRoleOnly(r)}
+                  onClick={() => setOverride(r)}
                   disabled={!user}
-                  className={`border rounded px-2 py-0.5 hover:bg-zinc-50 ${
-                    role === r ? "bg-zinc-100" : ""
-                  } ${!user ? "opacity-60 cursor-not-allowed" : ""}`}
+                  className={`border rounded px-2 py-0.5 hover:bg-zinc-50 ${role === r ? "bg-zinc-100" : ""} ${
+                    !user ? "opacity-60 cursor-not-allowed" : ""
+                  }`}
                 >
                   {r}
                 </button>
               ))}
+              <button
+                onClick={() => setOverride(null)}
+                className="border rounded px-2 py-0.5 hover:bg-zinc-50 ml-2"
+                title="Quitar override"
+              >
+                Limpiar
+              </button>
+            </div>
+
+            <div className="text-[10px] text-zinc-500">
+              * Esto no modifica el token ni la sesión en el servidor; sólo afecta el guard del cliente.
             </div>
           </div>
         </div>

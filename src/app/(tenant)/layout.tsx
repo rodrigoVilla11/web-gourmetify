@@ -1,17 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import {
-  getTenantId,
-  clearAuthAll,
-  isSuperAdmin, // 👈 opcional: logout centralizado
-} from "@/redux/services/baseApi";
+import { usePathname } from "next/navigation";
+import { useDispatch, useSelector } from "react-redux";
+import { clearAuthAll } from "@/redux/services/baseApi";
 import { useGetTenantByIdQuery } from "@/redux/services/tenantsApi";
 import { skipToken } from "@reduxjs/toolkit/query";
 import { baseApi } from "@/redux/services/baseApi";
-import { clearSession } from "@/redux/slices/authSlices";
-import { store } from "@/store";
+import {
+  clearSession,
+  selectAuthRole,
+  selectAuthTenantId,
+} from "@/redux/slices/authSlices";
 
 const NAV = [
   { href: "/dashboard", label: "Dashboard" },
@@ -27,13 +27,14 @@ export default function TenantLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
-  const router = useRouter();
-  const tenantId = getTenantId();
+  const dispatch = useDispatch();
+  const tenantId = useSelector(selectAuthTenantId);
+  const role = useSelector(selectAuthRole);
 
   function logout() {
     clearAuthAll(); // limpia localStorage y emite auth:changed
-    store.dispatch(clearSession()); // limpia slice
-    store.dispatch(baseApi.util.resetApiState()); // limpia cache de RTK Query
+    dispatch(clearSession()); // limpia slice
+    dispatch(baseApi.util.resetApiState());
     window.location.href = "/login";
   }
   const { data: tenant, isFetching: loadingTenant } = useGetTenantByIdQuery(
@@ -66,7 +67,7 @@ export default function TenantLayout({
         </nav>
 
         {/* 👇 Solo mostrar si es SUPER_ADMIN */}
-        {isSuperAdmin() && (
+        {role === "SUPER_ADMIN" && (
           <Link
             href="/admin"
             className="block px-5 py-2 rounded-lg bg-[#144336] text-white hover:bg-[#0f3329] transition text-center"
