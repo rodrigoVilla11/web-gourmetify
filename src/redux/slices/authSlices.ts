@@ -1,33 +1,24 @@
 // src/redux/slices/authSlice.ts
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
+import type { AuthUser } from "@/types/auth";
 
-export type UserRole = "ADMIN" | "MANAGER" | "CASHIER" | "STAFF";
-export type MockUser = {
-  id: string;
-  name: string;
-  email: string;
-  role: UserRole;
-  tenantId?: string | null;
-  branchId?: string | null;
-};
+type State = { user: AuthUser | null };
 
-type AuthState = {
-  user: MockUser | null;
-};
-
-const initialState: AuthState = {
-  user: null,
-};
+const initialState: State = { user: null };
 
 const authSlice = createSlice({
   name: "auth",
   initialState,
   reducers: {
-    setUser(state, action: PayloadAction<MockUser | null>) {
-      state.user = action.payload;
+    setUser(state, action: PayloadAction<AuthUser | null>) {
+      // normalizador suave por si el backend no envía name/role
+      state.user = action.payload ? { ...action.payload } : null;
+    },
+    clearUser(state) {
+      state.user = null;
     },
   },
 });
 
-export const { setUser } = authSlice.actions;
+export const { setUser, clearUser } = authSlice.actions;
 export default authSlice.reducer;

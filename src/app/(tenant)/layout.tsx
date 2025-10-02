@@ -4,11 +4,14 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   getTenantId,
-  getUserRole,      // 👈 importamos helper de rol
-  setAuthToken,
-  setBranchId,
-  clearAuthAll,    // 👈 opcional: logout centralizado
+  clearAuthAll,
+  isSuperAdmin, // 👈 opcional: logout centralizado
 } from "@/redux/services/baseApi";
+import { useGetTenantByIdQuery } from "@/redux/services/tenantsApi";
+import { skipToken } from "@reduxjs/toolkit/query";
+import { baseApi } from "@/redux/services/baseApi";
+import { clearUser } from "@/redux/slices/authSlices";
+import { store } from "@/store";
 
 const NAV = [
   { href: "/dashboard", label: "Dashboard" },
@@ -26,13 +29,19 @@ export default function TenantLayout({
   const pathname = usePathname();
   const router = useRouter();
   const tenantId = getTenantId();
-  const role = getUserRole(); // 👈 leemos el rol de localStorage
 
-  const logout = () => {
-    clearAuthAll(); // borra token, tenant, branch, user, role
-    router.push("/login");
-  };
-
+  function logout() {
+    clearAuthAll(); // limpia localStorage y emite auth:changed
+    store.dispatch(clearUser()); // limpia slice
+    store.dispatch(baseApi.util.resetApiState()); // limpia cache de RTK Query
+    window.location.href = "/login";
+  }
+  const { data: tenant, isFetching: loadingTenant } = useGetTenantByIdQuery(
+    tenantId ? { id: tenantId } : skipToken
+  );
+  const tenantLabel = loadingTenant
+    ? "Cargando…"
+    : tenant?.name ?? tenantId ?? "—";
   return (
     <div className="min-h-dvh flex">
       {/* Sidebar */}
@@ -56,8 +65,8 @@ export default function TenantLayout({
           })}
         </nav>
 
-        {/* 👇 Solo mostrar si es SUPERADMIN */}
-        {role === "SUPER_ADMIN" && (
+        {/* 👇 Solo mostrar si es SUPER_ADMIN */}
+        {isSuperAdmin() && (
           <Link
             href="/admin"
             className="block px-5 py-2 rounded-lg bg-[#144336] text-white hover:bg-[#0f3329] transition text-center"
@@ -68,7 +77,9 @@ export default function TenantLayout({
 
         <div className="mt-6 text-xs/5 opacity-80">
           <div className="font-semibold">Tenant</div>
-          <div className="truncate">{tenantId ?? "—"}</div>
+          <div className="truncate" title={tenantLabel}>
+            {tenantLabel}
+          </div>
         </div>
 
         <button

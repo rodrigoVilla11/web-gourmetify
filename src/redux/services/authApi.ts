@@ -1,5 +1,6 @@
 // src/redux/services/authApi.ts
-import { baseApi, setAuthToken, setTenantId } from "./baseApi";
+import { baseApi } from "./baseApi";
+import type { AuthUser } from "@/types/auth";
 
 export interface LoginDto {
   email: string;
@@ -8,12 +9,14 @@ export interface LoginDto {
 
 export interface AuthResponse {
   access_token: string;
-  role: string;
-  tenantId: string;
+  role: string;        // lo incluimos pero en el cliente guardamos dentro de user
+  tenantId: string | null;
   user: {
     id: string;
-    name: string;
+    name?: string;
     email: string;
+    tenantId?: string | null;
+    branchId?: string | null;
   };
 }
 
@@ -25,20 +28,20 @@ export const authApi = baseApi.injectEndpoints({
         method: "POST",
         body,
       }),
-      async onQueryStarted(arg, { queryFulfilled }) {
-        try {
-          const { data } = await queryFulfilled;
-          // guardamos token + tenant en localStorage
-          setAuthToken(data.access_token);
-          setTenantId(data.tenantId);
-        } catch (err) {
-          console.error("Login error:", err);
-        }
-      },
     }),
 
-    me: build.query<AuthResponse, void>({
-      query: () => ({ url: "/auth/me" }), // endpoint protegido que devuelve user actual
+    me: build.query<AuthUser, void>({
+      // Endpoint protegido que devuelve el usuario actual ya normalizado
+      query: () => ({ url: "/auth/me" }),
+      // Opcional: transformar la respuesta del backend a nuestro AuthUser
+      transformResponse: (data: any): AuthUser => ({
+        id: data?.id ?? data?.user?.id,
+        email: data?.email ?? data?.user?.email,
+        name: data?.name ?? data?.user?.name,
+        role: data?.role ?? data?.user?.role,
+        tenantId: data?.tenantId ?? data?.user?.tenantId ?? null,
+        branchId: data?.branchId ?? data?.user?.branchId ?? null,
+      }),
     }),
 
     changePassword: build.mutation<

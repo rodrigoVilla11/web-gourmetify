@@ -1,8 +1,12 @@
 "use client";
 import { useState } from "react";
 import { useLoginMutation } from "@/redux/services/authApi";
-import { setAuthToken, setTenantId } from "@/redux/services/baseApi";
-import { setUserRole, setAuthUser } from "@/redux/services/baseApi"; // 👈 nuevo
+import {
+  setAuthToken,
+  setTenantId,
+  setAuthUser,
+} from "@/redux/services/baseApi";
+import type { AuthUser } from "@/types/auth";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -12,23 +16,23 @@ export default function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      // Backend: { access_token, role, tenantId, user }
       const res = await login({ email, password }).unwrap();
-      // res: { access_token, role, tenantId, user }
 
-      // guardar credenciales
+      // Guardar credenciales
       setAuthToken(res.access_token);
       setTenantId(res.tenantId ?? null);
-      setUserRole(res.role ?? null);
-      setAuthUser(res.user ? { ...res.user, role: res.role } : null);
 
-      // redirigir según rol
-      if (res.role === "SUPERADMIN") {
-        window.location.href = "/admin";              // panel global
-      } else if (res.role === "ADMIN") {
-        window.location.href = "/dashboard";          // dashboard tenant admin
-      } else {
-        window.location.href = "/dashboard";          // app usuario
-      }
+      // Guardamos role dentro de user
+      const user: AuthUser | null = res.user
+        ? { ...res.user, role: (res.role as AuthUser["role"]) }
+        : null;
+      setAuthUser(user);
+
+      // Redirección por rol
+      const role = user?.role;
+      if (role === "SUPER_ADMIN")      window.location.href = "/admin";
+      else                             window.location.href = "/dashboard";
     } catch {
       alert("Login incorrecto");
     }

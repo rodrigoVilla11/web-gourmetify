@@ -1,76 +1,99 @@
-// src/components/dev/DevAuthPanel.tsx
+// src/components/dev/DevRoleSwitcher.tsx
 "use client";
 
+import { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { MockUser, setUser } from "@/redux/slices/authSlices";
 import type { RootState } from "@/store";
-import { useState } from "react";
+import type { UserRole } from "@/types/auth";
+import { getAuthUser, setAuthUser, AUTH_EVENT } from "@/redux/services/baseApi";
+import { clearUser, setUser } from "@/redux/slices/authSlices";
 
-export default function DevAuthPanel() {
-  const user = useSelector((s: RootState) => s.auth.user);
+const roleOptions: UserRole[] = ["SUPER_ADMIN", "ADMIN", "MANAGER", "CASHIER", "WAITER"];
+
+export default function DevRoleSwitcher() {
   const dispatch = useDispatch();
+  const user = useSelector((s: RootState) => s.auth.user);
   const [open, setOpen] = useState(false);
 
-  const setRole = (role: "ADMIN" | "MANAGER" | "CASHIER" | "STAFF") => {
-    if (!user) return;
-    const next = { ...user, role };
-    dispatch(setUser(next));
-    localStorage.setItem("mock_user", JSON.stringify(next));
+  // sync multi-pestaña + primer carga desde localStorage
+  useEffect(() => {
+    const sync = () => {
+      const u = getAuthUser();
+      if (u) dispatch(setUser(u));
+      else dispatch(clearUser());
+    };
+    sync();
+    window.addEventListener("storage", sync);
+    window.addEventListener(AUTH_EVENT, sync as EventListener);
+    window.addEventListener("focus", sync);
+    const vis = () => { if (document.visibilityState === "visible") sync(); };
+    document.addEventListener("visibilitychange", vis);
+    return () => {
+      window.removeEventListener("storage", sync);
+      window.removeEventListener(AUTH_EVENT, sync as EventListener);
+      window.removeEventListener("focus", sync);
+      document.removeEventListener("visibilitychange", vis);
+    };
+  }, [dispatch]);
+
+  const currentInfo = useMemo(() => {
+    if (!user) return "—";
+    const parts = [user.name ?? user.email, user.role ?? "no-role"];
+    if (user.tenantId) parts.push(`t:${user.tenantId.slice(0, 6)}…`);
+    if (user.branchId) parts.push(`b:${user.branchId.slice(0, 6)}…`);
+    return parts.join(" · ");
+  }, [user?.name, user?.email, user?.role, user?.tenantId, user?.branchId]);
+
+  const setRoleOnly = (r: UserRole) => {
+    const u = getAuthUser();
+    if (!u) return;
+    // solo cambia role; todo lo demás queda igual
+    setAuthUser({ ...u, role: r });
   };
 
-  const clear = () => {
-    dispatch(setUser(null));
-    localStorage.removeItem("mock_user");
-  };
-
-  // UI minimal, flotante
   return (
-    <div style={{ position: "fixed", bottom: 12, right: 12, zIndex: 50 }}>
+    <div style={{ position: "fixed", bottom: 12, right: 12, zIndex: 9999 }}>
       {open && (
-        <div className="border rounded-lg bg-white shadow p-3 text-xs space-y-2">
-          <div className="font-medium">DevAuth</div>
-          <div>user: {user ? `${user.name} (${user.role})` : "—"}</div>
-          <div className="flex gap-1 flex-wrap">
-            {["ADMIN", "MANAGER", "CASHIER", "STAFF"].map((r) => (
-              <button
-                key={r}
-                onClick={() => setRole(r as any)}
-                className="border rounded px-2 py-0.5 hover:bg-zinc-50"
-              >
-                {r}
-              </button>
-            ))}
-          </div>
-          <div className="flex gap-2">
-            <button onClick={clear} className="underline">
-              Logout (mock)
-            </button>
+        <div className="border rounded-lg bg-white shadow p-3 text-xs space-y-3 w-[360px]">
+          <div className="flex items-center justify-between">
+            <div className="font-medium">Dev: Role</div>
             <button
-              onClick={() => {
-                const mock = {
-                  id: "u-dev",
-                  name: "Dev Admin",
-                  email: "admin@gourmetify.dev",
-                  role: "ADMIN",
-                  tenantId: "8944766a-199e-4cc2-9f13-7214d103e78a",
-                  branchId: "cdc2943d-1183-434f-8357-e0f59b40ef3b",
-                } as const satisfies MockUser;
-                dispatch(setUser(mock));
-                localStorage.setItem("mock_user", JSON.stringify(mock));
-              }}
-              className="underline"
+              className="text-zinc-500 hover:text-zinc-800"
+              onClick={() => setOpen(false)}
+              title="Cerrar"
             >
-              Login (ADMIN)
+              ×
             </button>
+          </div>
+
+          <div className="space-y-2">
+            <div className="text-zinc-500">Actual</div>
+            <div className="text-sm">{currentInfo}</div>
+
+            <div className="text-zinc-500 mt-2">Cambiar rol</div>
+            <div className="flex flex-wrap gap-1">
+              {roleOptions.map((r) => (
+                <button
+                  key={r}
+                  onClick={() => setRoleOnly(r)}
+                  className={`border rounded px-2 py-0.5 hover:bg-zinc-50 ${
+                    user?.role === r ? "bg-zinc-100" : ""
+                  }`}
+                >
+                  {r}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       )}
+
       <button
         onClick={() => setOpen((v) => !v)}
         className="border rounded-full px-3 py-1 bg-white shadow text-xs"
-        title="DevAuth"
+        title="Dev: Role"
       >
-        {open ? "×" : "Auth"}
+        {open ? "×" : "Role"}
       </button>
     </div>
   );

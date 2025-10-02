@@ -1,7 +1,7 @@
 import { baseApi } from "./baseApi";
 
 /** === Enums que usás en Users === */
-export type UserRole = "ADMIN" | "MANAGER" | "CASHIER" | "STAFF" | string;
+export type UserRole = "ADMIN" | "MANAGER" | "CASHIER" | "WAITER" | string;
 
 /** === Modelos devueltos por tu service (coinciden con los select) === */
 export interface UserSummary {

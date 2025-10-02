@@ -14,7 +14,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const pathname = usePathname();
 
   return (
-    <RoleGuard allow={["ADMIN", "MANAGER"]}>
+    <RoleGuard allow={["SUPER_ADMIN"]}>
       <div className="min-h-dvh grid grid-cols-12 bg-zinc-50">
         {/* Sidebar */}
         <aside className="col-span-12 md:col-span-2 border-r bg-white p-4 flex flex-col">
