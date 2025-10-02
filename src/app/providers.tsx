@@ -1,10 +1,10 @@
 // src/app/providers.tsx
 "use client";
 
-import { Provider } from "react-redux";
+import { Provider, useDispatch, useSelector } from "react-redux";
+import { skipToken } from "@reduxjs/toolkit/query";
 import { store } from "@/store";
 import { useEffect } from "react";
-import { useDispatch } from "react-redux";
 import {
   getAuthUser,
   getTenantId,
@@ -12,11 +12,16 @@ import {
   getAuthToken,
   getBranchId,
 } from "@/redux/services/baseApi";
-import { hydrateSession } from "@/redux/slices/authSlices";
+import { hydrateSession, selectAuthToken } from "@/redux/slices/authSlices";
+import { useMeQuery } from "@/redux/services/authApi";
 import DevRoleSwitcher from "@/components/dev/DevAuthPanel";
 
 function BootstrapAuth() {
   const dispatch = useDispatch();
+
+  const token = useSelector(selectAuthToken);
+
+  useMeQuery(token ? undefined : skipToken);
 
   useEffect(() => {
     dispatch(
