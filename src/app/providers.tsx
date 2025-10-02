@@ -14,7 +14,6 @@ import {
 } from "@/redux/services/baseApi";
 import { hydrateSession, selectAuthToken } from "@/redux/slices/authSlices";
 import { useMeQuery } from "@/redux/services/authApi";
-import DevRoleSwitcher from "@/components/dev/DevAuthPanel";
 
 function BootstrapAuth() {
   const dispatch = useDispatch();
@@ -42,7 +41,6 @@ export default function Providers({ children }: { children: React.ReactNode }) {
   return (
     <Provider store={store}>
       <BootstrapAuth />
-      <DevRoleSwitcher />
       {children}
     </Provider>
   );
