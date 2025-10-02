@@ -1,45 +1,45 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useLoginMutation } from "@/redux/services/authApi";
-import {
-  setAuthToken,
-  setTenantId,
-  setAuthUser,
-} from "@/redux/services/baseApi";
-import type { AuthUser } from "@/types/auth";
+import { useSelector } from "react-redux";
+import { selectSession } from "@/redux/slices/authSlices";
+import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
+  const router = useRouter();
+  const session = useSelector(selectSession);
+  const sessionUserRole = session.user?.role;
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [login, { isLoading, error }] = useLoginMutation();
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [login, { isLoading }] = useLoginMutation();
+
+  useEffect(() => {
+    if (!session.token) return;
+    const role = session.role ?? sessionUserRole;
+    if (role === "SUPER_ADMIN") {
+      router.replace("/admin");
+    } else {
+      router.replace("/dashboard");
+    }
+  }, [router, session.token, session.role, sessionUserRole]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrorMessage(null);
     try {
-      // Backend: { access_token, role, tenantId, user }
-      const res = await login({ email, password }).unwrap();
-
-      // Guardar credenciales
-      setAuthToken(res.access_token);
-      setTenantId(res.tenantId ?? null);
-
-      // Guardamos role dentro de user
-      const user: AuthUser | null = res.user
-        ? { ...res.user, role: (res.role as AuthUser["role"]) }
-        : null;
-      setAuthUser(user);
-
-      // Redirección por rol
-      const role = user?.role;
-      if (role === "SUPER_ADMIN")      window.location.href = "/admin";
-      else                             window.location.href = "/dashboard";
+      await login({ email, password }).unwrap();
     } catch {
-      alert("Login incorrecto");
+      setErrorMessage("Error al iniciar sesión");
     }
   };
 
   return (
-    <form onSubmit={handleSubmit} className="mx-auto max-w-sm p-6 bg-white shadow rounded-lg space-y-4">
+    <form
+      onSubmit={handleSubmit}
+      className="mx-auto max-w-sm p-6 bg-white shadow rounded-lg space-y-4"
+    >
       <h1 className="text-xl font-bold">Iniciar sesión</h1>
       <input
         type="email"
@@ -55,10 +55,14 @@ export default function LoginPage() {
         placeholder="Contraseña"
         className="w-full border rounded px-3 py-2"
       />
-      <button type="submit" disabled={isLoading} className="w-full bg-[#144336] text-white py-2 rounded">
+      <button
+        type="submit"
+        disabled={isLoading}
+        className="w-full bg-[#144336] text-white py-2 rounded"
+      >
         {isLoading ? "Ingresando…" : "Ingresar"}
       </button>
-      {error && <p className="text-red-600 text-sm">Error al iniciar sesión</p>}
+      {errorMessage && <p className="text-red-600 text-sm">{errorMessage}</p>}
     </form>
   );
 }

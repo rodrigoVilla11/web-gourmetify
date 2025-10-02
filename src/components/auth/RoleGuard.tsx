@@ -1,15 +1,17 @@
 "use client";
 import { ReactNode, useMemo } from "react";
 import { useSelector } from "react-redux";
+import { selectSession } from "@/redux/slices/authSlices";
 
 type Props = { allow: string[]; children: ReactNode };
 
 export default function RoleGuard({ allow, children }: Props) {
-  // Ajustá este selector a tu estado real de auth/session
-  const currentUser = useSelector((s: any) => s.auth?.user) as { id?: string; role?: string } | null;
-  const ok = useMemo(() => !!currentUser?.role && allow.includes(currentUser.role), [currentUser, allow]);
+  const session = useSelector(selectSession);
+  const user = session.user;
+  const role = session.role ?? user?.role ?? null;
 
-  if (!currentUser) {
+  const ok = useMemo(() => !!role && allow.includes(role), [role, allow]);
+  if (!user) {
     return <div className="p-6">Necesitás iniciar sesión.</div>;
   }
   if (!ok) {

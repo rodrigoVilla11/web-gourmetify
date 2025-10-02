@@ -3,24 +3,46 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import type { RootState } from "@/store";
 import type { UserRole } from "@/types/auth";
 import { getAuthUser, setAuthUser, AUTH_EVENT } from "@/redux/services/baseApi";
-import { clearUser, setUser } from "@/redux/slices/authSlices";
+import {
+  setSession,
+  clearSession,
+  selectAuthUser,
+  selectAuthRole,
+  selectAuthTenantId,
+  selectAuthBranchId,
+} from "@/redux/slices/authSlices";
 
 const roleOptions: UserRole[] = ["SUPER_ADMIN", "ADMIN", "MANAGER", "CASHIER", "WAITER"];
 
 export default function DevRoleSwitcher() {
   const dispatch = useDispatch();
-  const user = useSelector((s: RootState) => s.auth.user);
+
+  // selectors del slice nuevo
+  const user = useSelector(selectAuthUser);
+  const role = useSelector(selectAuthRole);
+  const tenantId = useSelector(selectAuthTenantId);
+  const branchId = useSelector(selectAuthBranchId);
+
   const [open, setOpen] = useState(false);
 
-  // sync multi-pestaña + primer carga desde localStorage
+  // Sincroniza Redux <= localStorage (authUser) en arranque y ante cambios (storage/AUTH_EVENT/focus/visibility)
   useEffect(() => {
     const sync = () => {
       const u = getAuthUser();
-      if (u) dispatch(setUser(u));
-      else dispatch(clearUser());
+      if (u) {
+        dispatch(
+          setSession({
+            user: u,
+            role: u.role ?? null,
+            tenantId: u.tenantId ?? null,
+            branchId: u.branchId ?? null,
+          })
+        );
+      } else {
+        dispatch(clearSession());
+      }
     };
     sync();
     window.addEventListener("storage", sync);
@@ -38,17 +60,23 @@ export default function DevRoleSwitcher() {
 
   const currentInfo = useMemo(() => {
     if (!user) return "—";
-    const parts = [user.name ?? user.email, user.role ?? "no-role"];
-    if (user.tenantId) parts.push(`t:${user.tenantId.slice(0, 6)}…`);
-    if (user.branchId) parts.push(`b:${user.branchId.slice(0, 6)}…`);
+    const parts = [user.name ?? user.email, role ?? "no-role"];
+    if (tenantId) parts.push(`t:${tenantId.slice(0, 6)}…`);
+    if (branchId) parts.push(`b:${branchId.slice(0, 6)}…`);
     return parts.join(" · ");
-  }, [user?.name, user?.email, user?.role, user?.tenantId, user?.branchId]);
+  }, [user, role, tenantId, branchId]);
 
+  // SOLO cambia el role dentro de authUser y refleja inmediato en Redux
   const setRoleOnly = (r: UserRole) => {
     const u = getAuthUser();
     if (!u) return;
-    // solo cambia role; todo lo demás queda igual
-    setAuthUser({ ...u, role: r });
+    const updated = { ...u, role: r };
+
+    // 1) Persistencia + broadcast (AUTH_EVENT) => otras pestañas se sincronizan
+    setAuthUser(updated);
+
+    // 2) Actualización inmediata de UI en esta pestaña (sin tocar token/tenant/branch)
+    dispatch(setSession({ user: updated, role: r }));
   };
 
   return (
@@ -76,9 +104,10 @@ export default function DevRoleSwitcher() {
                 <button
                   key={r}
                   onClick={() => setRoleOnly(r)}
+                  disabled={!user}
                   className={`border rounded px-2 py-0.5 hover:bg-zinc-50 ${
-                    user?.role === r ? "bg-zinc-100" : ""
-                  }`}
+                    role === r ? "bg-zinc-100" : ""
+                  } ${!user ? "opacity-60 cursor-not-allowed" : ""}`}
                 >
                   {r}
                 </button>

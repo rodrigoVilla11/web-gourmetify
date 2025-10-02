@@ -10,7 +10,7 @@ import {
 import { useGetTenantByIdQuery } from "@/redux/services/tenantsApi";
 import { skipToken } from "@reduxjs/toolkit/query";
 import { baseApi } from "@/redux/services/baseApi";
-import { clearUser } from "@/redux/slices/authSlices";
+import { clearSession } from "@/redux/slices/authSlices";
 import { store } from "@/store";
 
 const NAV = [
@@ -32,7 +32,7 @@ export default function TenantLayout({
 
   function logout() {
     clearAuthAll(); // limpia localStorage y emite auth:changed
-    store.dispatch(clearUser()); // limpia slice
+    store.dispatch(clearSession()); // limpia slice
     store.dispatch(baseApi.util.resetApiState()); // limpia cache de RTK Query
     window.location.href = "/login";
   }

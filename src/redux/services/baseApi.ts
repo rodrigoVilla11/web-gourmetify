@@ -6,8 +6,8 @@ const isBrowser = typeof window !== "undefined";
 // ==== Claves locales (UNIFICADAS) ====
 const TENANT_KEY = "x-tenant-id";
 const BRANCH_KEY = "x-branch-id";
-const TOKEN_KEY  = "token";
-const USER_KEY   = "authUser"; // 👈 unificado
+const TOKEN_KEY = "token";
+const USER_KEY = "authUser"; // 👈 unificado
 
 // Evento custom para notificar cambios locales en la misma pestaña
 export const AUTH_EVENT = "auth:changed";
@@ -17,7 +17,8 @@ const broadcastAuthChange = () => {
 };
 
 // Lectura SSR-safe
-const getLocal = (k: string) => (isBrowser ? window.localStorage.getItem(k) : null);
+const getLocal = (k: string) =>
+  isBrowser ? window.localStorage.getItem(k) : null;
 
 // Defaults opcionales por env
 const DEFAULT_TENANT = process.env.NEXT_PUBLIC_TENANT_ID || null;
@@ -47,12 +48,32 @@ export const baseApi = createApi({
     },
   }),
   tagTypes: [
-    "Customers","Branches","Accounts","CashClosures","Categories",
-    "CustomerAddresses","CustomerNotes","CustomerTags","DailyReports",
-    "Employees","EmployeeShifts","Ingredients","IngredientRecipes",
-    "Inventory","Movements","Orders","OrderPayments","ProductCategories",
-    "Products","ProductionBatches","PurchaseOrders","Recipes","Suppliers",
-    "Tenants","Transfers","Users",
+    "Customers",
+    "Branches",
+    "Accounts",
+    "CashClosures",
+    "Categories",
+    "CustomerAddresses",
+    "CustomerNotes",
+    "CustomerTags",
+    "DailyReports",
+    "Employees",
+    "EmployeeShifts",
+    "Ingredients",
+    "IngredientRecipes",
+    "Inventory",
+    "Movements",
+    "Orders",
+    "OrderPayments",
+    "ProductCategories",
+    "Products",
+    "ProductionBatches",
+    "PurchaseOrders",
+    "Recipes",
+    "Suppliers",
+    "Tenants",
+    "Transfers",
+    "Users",
   ],
   endpoints: () => ({}),
 });
@@ -66,6 +87,10 @@ export function setAuthToken(token: string | null) {
   if (token) localStorage.setItem(TOKEN_KEY, token);
   else localStorage.removeItem(TOKEN_KEY);
   broadcastAuthChange();
+}
+
+export function getAuthToken(): string | null {
+  return getLocal(TOKEN_KEY);
 }
 
 export function setTenantId(tenantId: string | null) {
@@ -104,9 +129,18 @@ export function setAuthUser(user: AuthUser | null) {
 export function getAuthUser(): AuthUser | null {
   const raw = getLocal(USER_KEY);
   if (!raw) return null;
-  try { return JSON.parse(raw) as AuthUser; }
-  catch { return null; }
+  try {
+    return JSON.parse(raw) as AuthUser;
+  } catch {
+    return null;
+  }
 }
+
+export function getUserRole(): AuthUser["role"] | null {
+  const user = getAuthUser();
+  return user?.role ?? null;
+}
+
 
 /* ======================
    Conveniencia
