@@ -17,7 +17,7 @@ export default function RootLayout({
     <html lang="es">
       <body>
         <Providers>
-          <DevRoleSwitcher />
+          {/* <DevRoleSwitcher /> */}
           {children}
         </Providers>
       </body>

@@ -5,10 +5,15 @@ import Link from "next/link";
 import { useSelector } from "react-redux";
 import { skipToken } from "@reduxjs/toolkit/query";
 import { useListUsersQuery } from "@/redux/services/usersApi";
+
 import {
-  selectAuthTenantId,
   selectIsAuthenticated,
+  selectAuthTenantId,
+  selectAuthBranchId,
+  selectEffectiveRole,
+  selectAuthUser,
 } from "@/redux/slices/authSlices";
+
 import type { LucideIcon } from "lucide-react";
 import {
   ArrowUpRight,
@@ -22,12 +27,27 @@ import {
 } from "lucide-react";
 
 export default function TenantDashboardPage() {
-  const tenantId = useSelector(selectAuthTenantId);
   const isAuthenticated = useSelector(selectIsAuthenticated);
-  const { data: users = [], isLoading } = useListUsersQuery(
-    tenantId ? { tenantId } : skipToken
-  );
+  const tenantId = useSelector(selectAuthTenantId);
+  const branchId = useSelector(selectAuthBranchId);
+  const role = useSelector(selectEffectiveRole);
+  const user = useSelector(selectAuthUser);
 
+  const isAdminLike = role === "SUPER_ADMIN" || role === "ADMIN";
+  const assignedBranchId = user?.branchId ?? null;
+
+  // ---- QueryArg
+  const queryArg = tenantId
+    ? isAdminLike
+      ? { tenantId, branchId: branchId ?? undefined } // null = todas
+      : branchId
+      ? { tenantId, branchId }
+      : skipToken
+    : skipToken;
+
+  const { data: users = [], isLoading } = useListUsersQuery(queryArg as any);
+
+  // ---- Mensajes sin contexto
   if (!tenantId) {
     return (
       <div className="space-y-6">
@@ -48,11 +68,64 @@ export default function TenantDashboardPage() {
       </div>
     );
   }
+
+  // ---- Banner de contexto
+  const contextBanner = (
+    <div className="rounded-xl border border-zinc-200 bg-white p-3 text-xs text-zinc-700">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-medium text-[#144336]">Contexto</span>
+        <span className="text-zinc-400">•</span>
+        <span>
+          tenantId: <span className="font-mono">{tenantId.slice(0, 8)}…</span>
+        </span>
+        <span className="text-zinc-400">•</span>
+        <span>
+          rol: <span className="font-semibold">{role ?? "—"}</span>
+        </span>
+
+        {!isAdminLike ? (
+          <>
+            <span className="text-zinc-400">•</span>
+            <span>
+              sucursal:{" "}
+              <span className="font-mono">
+                {(branchId ?? assignedBranchId)?.slice(0, 8) ?? "—"}…
+              </span>
+            </span>
+            <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-amber-700">
+              Vista limitada por sucursal
+            </span>
+          </>
+        ) : (
+          <>
+            <span className="text-zinc-400">•</span>
+            <span>
+              sucursal:{" "}
+              <span className="font-mono">
+                {branchId ? branchId.slice(0, 8) + "…" : "Todas"}
+              </span>
+            </span>
+            {branchId === null && (
+              <span className="ml-2 rounded-full bg-sky-100 px-2 py-0.5 text-sky-700">
+                Vista global del tenant
+              </span>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+
+  // ---- Métricas
   const metrics: MetricCardProps[] = [
     {
       title: "Usuarios",
       value: users?.length ?? 0,
-      hint: "Colaboradores activos",
+      hint: !isAdminLike
+        ? "Colaboradores de tu sucursal"
+        : branchId
+        ? "Colaboradores de la sucursal seleccionada"
+        : "Colaboradores de todas las sucursales",
       icon: Users,
       accent: "from-amber-400/80 via-amber-300 to-amber-500",
       isLoading,
@@ -93,9 +166,9 @@ export default function TenantDashboardPage() {
       icon: Settings2,
     },
   ];
+
   return (
     <div className="space-y-10">
-      {/* Header */}
       <header className="space-y-2">
         <h1 className="text-3xl font-black tracking-tight text-[#144336]">
           Dashboard
@@ -105,14 +178,14 @@ export default function TenantDashboardPage() {
         </p>
       </header>
 
-      {/* Métricas */}
+      {contextBanner}
+
       <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {metrics.map((metric) => (
           <MetricCard key={metric.title} {...metric} />
         ))}
       </section>
 
-      {/* Accesos rápidos */}
       <section className="space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold text-[#144336]">
@@ -132,6 +205,7 @@ export default function TenantDashboardPage() {
   );
 }
 
+/* ========== UI bits ========== */
 type MetricCardProps = {
   title: string;
   value?: number;
@@ -188,7 +262,7 @@ function MetricCard({
           <Icon className="h-5 w-5" />
         </span>
       </div>
-      {hint && <p className="mt-3 text-xs text-zinc-500">{hint}</p>}{" "}
+      {hint && <p className="mt-3 text-xs text-zinc-500">{hint}</p>}
     </div>
   );
 }
