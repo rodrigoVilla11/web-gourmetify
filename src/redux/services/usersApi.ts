@@ -44,13 +44,33 @@ export type TenantArg = { tenantId?: string };
 export const usersApi = baseApi.injectEndpoints({
   endpoints: (build) => ({
     /** GET /users */
-    listUsers: build.query<UserSummary[], TenantArg | void>({
+    listUsers: build.query<
+      UserSummary[],
+      { tenantId: string; branchId: string | "ALL" } | void
+    >({
       query: (arg) => {
         const headers: Record<string, string> = {};
-        const tenantId = (arg as TenantArg | undefined)?.tenantId;
+        const tenantId = (arg as any)?.tenantId;
+        const branchId = (arg as any)?.branchId; // "ALL" | uuid
+        console.log({ tenantId, branchId });
         if (tenantId) headers["x-tenant-id"] = tenantId;
-        return { url: "/users", headers };
+        if (branchId && branchId !== "ALL") headers["x-branch-id"] = branchId; // opcional
+
+        // 👇 IMPORTANTÍSIMO: mandar branchId por QUERY para que lo lea el controller
+        const params = new URLSearchParams();
+        if (branchId) params.set("branchId", branchId); // "ALL" | uuid | "null"
+        const qs = params.toString();
+
+        return { url: `/users${qs ? `?${qs}` : ""}`, headers };
       },
+
+      // clave de cache distinta por sucursal
+      serializeQueryArgs: ({ endpointName, queryArgs }) => {
+        const tenantId = (queryArgs as any)?.tenantId ?? "NONE";
+        const branchId = (queryArgs as any)?.branchId ?? "ALL";
+        return `${endpointName}|${tenantId}|${branchId}`;
+      },
+
       providesTags: (result) =>
         result
           ? [
@@ -59,6 +79,7 @@ export const usersApi = baseApi.injectEndpoints({
             ]
           : [{ type: "Users", id: "LIST" }],
     }),
+
     listUsersAdmin: build.query<UserSummary[], TenantArg | void>({
       query: (arg) => {
         const tenantId = (arg as TenantArg | undefined)?.tenantId;

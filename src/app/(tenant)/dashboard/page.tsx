@@ -33,20 +33,20 @@ export default function TenantDashboardPage() {
   const role = useSelector(selectEffectiveRole);
   const user = useSelector(selectAuthUser);
 
-  const isAdminLike = role === "SUPER_ADMIN" || role === "ADMIN";
   const assignedBranchId = user?.branchId ?? null;
 
   // ---- QueryArg
-  const queryArg = tenantId
-    ? isAdminLike
-      ? { tenantId, branchId: branchId ?? undefined } // null = todas
-      : branchId
-      ? { tenantId, branchId }
-      : skipToken
-    : skipToken;
+  const isAdminLike = role === "SUPER_ADMIN" || role === "ADMIN";
+  const branchKey = isAdminLike ? branchId ?? "ALL" : branchId ?? skipToken;
 
-  const { data: users = [], isLoading } = useListUsersQuery(queryArg as any);
+  const queryArg = tenantId ? { tenantId, branchId: branchKey } : skipToken;
 
+  console.log({ queryArg });
+  const { data: users = [], isLoading } = useListUsersQuery(queryArg as any, {
+    refetchOnMountOrArgChange: true,
+  });
+
+  console.log(users);
   // ---- Mensajes sin contexto
   if (!tenantId) {
     return (

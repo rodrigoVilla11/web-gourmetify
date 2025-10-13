@@ -8,13 +8,15 @@ import { baseApi, setBranchId } from "@/redux/services/baseApi";
 import { useGetBranchesQuery } from "@/redux/services/branchesApi";
 import { setSession } from "@/redux/slices/authSlices";
 
+type BranchIdUI = string | null | "ALL";
+
 type Props = {
   tenantId: string | null;
-  currentBranchId: string | null;
-  assignedBranchId: string | null; // 👈 branch del usuario (de su perfil)
-  canSwitch: boolean; // 👈 permitir cambios de sucursal
-  onChanged?: (branchId: string | null) => void;
-  hideWhenLocked?: boolean; // opcional: ocultar selector si no puede cambiar
+  currentBranchId: BranchIdUI;      // Puede ser "ALL" (todas), null o un id
+  assignedBranchId: string | null;  // Sucursal fija del usuario (si no puede cambiar)
+  canSwitch: boolean;               // Solo true para SUPER_ADMIN/ADMIN (viene del layout)
+  onChanged?: (branchId: BranchIdUI) => void;
+  hideWhenLocked?: boolean;         // Si no puede cambiar, ocultar el selector
 };
 
 export default function BranchSelector({
@@ -27,10 +29,12 @@ export default function BranchSelector({
 }: Props) {
   const dispatch = useDispatch();
 
+  // Trae sucursales del tenant
   const { data: branches, isFetching } = useGetBranchesQuery(
     tenantId ? { tenantId } : skipToken
   );
 
+  // Orden alfabético para UI
   const options = useMemo(
     () =>
       (branches ?? [])
@@ -39,7 +43,7 @@ export default function BranchSelector({
     [branches]
   );
 
-  // 🔒 Si NO es admin, forzamos el branch al asignado
+  // Forzar sucursal asignada si el usuario NO puede cambiar
   useEffect(() => {
     if (!tenantId) return;
     if (!canSwitch && assignedBranchId && currentBranchId !== assignedBranchId) {
@@ -48,36 +52,50 @@ export default function BranchSelector({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenantId, canSwitch, assignedBranchId, currentBranchId]);
 
-  // Auto-selección solo si PUEDE cambiar y no hay branch seleccionado
+  // Si puede cambiar y hay una sola sucursal, seleccionar automáticamente
   useEffect(() => {
     if (!tenantId || isFetching || !canSwitch) return;
-    if (!currentBranchId && options.length === 1) {
+    const isAll = currentBranchId === "ALL" || currentBranchId == null;
+    if (isAll && options.length === 1) {
       persistBranch(options[0].id);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenantId, isFetching, canSwitch, currentBranchId, options.length]);
 
+  // Persistencia del cambio (storage + redux + reset RTKQ + callback)
   const persistBranch = (branchId: string | null) => {
-    setBranchId(branchId);
-    dispatch(setSession({ branchId }));
+    // En modo "puede cambiar", UI vacío ("") => "ALL"
+    const toStore: BranchIdUI = canSwitch && !branchId ? "ALL" : branchId;
+
+    // 1) Storage (para header x-branch-id en baseApi)
+    setBranchId(toStore as any);
+
+    // 2) Redux (auth.branchId)
+    dispatch(setSession({ branchId: toStore as any }));
+
+    // 3) Limpiar caché RTK Query para refetchear con el nuevo header
     dispatch(baseApi.util.resetApiState());
-    onChanged?.(branchId);
+
+    // 4) Notificar al layout para refrescar la ruta si hace falta
+    onChanged?.(toStore);
   };
 
-  // UI: si está bloqueado y querés ocultarlo
+  // Mapear sentinela a valor de <select>
+  // "ALL" o null => "" (primera opción)
+  // id => id
+  const uiValue =
+    currentBranchId === "ALL" || currentBranchId == null ? "" : currentBranchId;
+
   if (hideWhenLocked && !canSwitch) return null;
 
   return (
     <select
       className="w-full rounded px-2 py-1 text-sm text-[#144336] bg-white/95"
       disabled={isFetching || !canSwitch}
-      title={
-        !canSwitch ? "No tenés permisos para cambiar de sucursal" : undefined
-      }
-      value={currentBranchId ?? ""}
+      title={!canSwitch ? "No tenés permisos para cambiar de sucursal" : undefined}
+      value={uiValue}
       onChange={(e) => persistBranch(e.target.value || null)}
     >
-      {/* opción vacía → "Todas" si es admin, "Sucursal asignada" si no */}
       <option value="">
         {isFetching
           ? "Cargando…"

@@ -14,7 +14,7 @@ const NS = "gourmetify";
 const TENANT_KEY = `${NS}.ctx.tenant`;
 const BRANCH_KEY = `${NS}.ctx.branch`;
 const TOKEN_KEY = `${NS}.auth.token`;
-const USER_KEY  = `${NS}.auth.user`;
+const USER_KEY = `${NS}.auth.user`;
 
 // Evento custom para notificar cambios locales en la misma pestaña
 export const AUTH_EVENT = "auth:changed";
@@ -43,16 +43,47 @@ if (isBrowser) {
     }
   });
 }
+// ...arriba ya están TOKEN_KEY, TENANT_KEY, BRANCH_KEY, USER_KEY
+
 const rawBaseQuery = fetchBaseQuery({
   baseUrl: process.env.NEXT_PUBLIC_API_URL!,
   credentials: "include",
   prepareHeaders: (headers) => {
     const token = getLocal(TOKEN_KEY);
     if (token) headers.set("authorization", `Bearer ${token}`);
-    const tenantId = getLocal(TENANT_KEY) || DEFAULT_TENANT || undefined;
+
+    const tenantId =
+      getLocal(TENANT_KEY) ?? process.env.NEXT_PUBLIC_TENANT_ID ?? undefined;
     if (tenantId) headers.set("x-tenant-id", tenantId);
-    const branchId = getLocal(BRANCH_KEY) || DEFAULT_BRANCH || undefined;
-    if (branchId) headers.set("x-branch-id", branchId);
+
+    // role desde user
+    const role = (() => {
+      const raw = getLocal(USER_KEY);
+      if (!raw) return null;
+      try {
+        return (JSON.parse(raw)?.role as string) ?? null;
+      } catch {
+        return null;
+      }
+    })();
+
+    const stored = getLocal(BRANCH_KEY); // "ALL" | uuid | null
+
+    // 🚩 Nunca enviar "ALL" como header
+    const effectiveStored = stored === "ALL" ? null : stored;
+
+    // 👇 ADMIN y SUPER_ADMIN pueden ir sin branch (modo "Todas")
+    const isAdminLike = role === "SUPER_ADMIN" || role === "ADMIN";
+
+    if (isAdminLike) {
+      if (effectiveStored) headers.set("x-branch-id", effectiveStored);
+      else headers.delete("x-branch-id"); // "Todas" → sin header
+    } else {
+      // No-admin: siempre branch concreta (BranchSelector la fuerza)
+      if (effectiveStored) headers.set("x-branch-id", effectiveStored);
+      else headers.delete("x-branch-id"); // fallback seguro (evita mandar "ALL")
+    }
+
     return headers;
   },
 });
@@ -136,9 +167,10 @@ export function setTenantId(tenantId: string | null) {
   broadcastAuthChange();
 }
 
-export function setBranchId(branchId: string | null) {
+export function setBranchId(branchId: string | null | "ALL") {
   if (!isBrowser) return;
-  if (branchId) localStorage.setItem(BRANCH_KEY, branchId);
+  if (branchId === "ALL") localStorage.setItem(BRANCH_KEY, "ALL");
+  else if (branchId) localStorage.setItem(BRANCH_KEY, branchId);
   else localStorage.removeItem(BRANCH_KEY);
   broadcastAuthChange();
 }
@@ -147,8 +179,11 @@ export function getTenantId(): string | null {
   return getLocal(TENANT_KEY) || DEFAULT_TENANT;
 }
 
-export function getBranchId(): string | null {
-  return getLocal(BRANCH_KEY) || DEFAULT_BRANCH;
+// src/redux/services/baseApi.ts
+export function getBranchId(): string | "ALL" | null {
+  const raw = getLocal(BRANCH_KEY);
+  if (raw === "ALL") return "ALL";
+  return raw || null;
 }
 
 /* ======================
@@ -157,8 +192,15 @@ export function getBranchId(): string | null {
 
 export function setAuthUser(user: AuthUser | null) {
   if (!isBrowser) return;
-  if (user) localStorage.setItem(USER_KEY, JSON.stringify(user));
-  else localStorage.removeItem(USER_KEY);
+  if (user) {
+    localStorage.setItem(USER_KEY, JSON.stringify(user));
+    if (user.role === "SUPER_ADMIN") {
+      // prevenir leaks al cambiar de cuentas
+      setBranchId(null);
+    }
+  } else {
+    localStorage.removeItem(USER_KEY);
+  }
   broadcastAuthChange();
 }
 

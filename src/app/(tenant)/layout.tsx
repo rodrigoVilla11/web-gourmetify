@@ -15,12 +15,11 @@ import {
   selectAuthBranchId,
   clearSession,
   selectAuthRole,
-  selectAuthUser, // si querés mostrar el banner Admin
-} from "@/redux/slices/authSlices"; // ajusta si tu archivo es authSlices
+  selectAuthUser,
+} from "@/redux/slices/authSlices";
 
-import { baseApi, setBranchId, clearAuthAll } from "@/redux/services/baseApi";
+import { baseApi, clearAuthAll } from "@/redux/services/baseApi";
 import { useGetTenantByIdQuery } from "@/redux/services/tenantsApi";
-import { useGetBranchesQuery } from "@/redux/services/branchesApi"; // asumiendo que existe
 import BranchSelector from "@/components/tenant/BranchSelector";
 
 const NAV = [
@@ -39,11 +38,7 @@ const ALLOW_ROLES = [
   "WAITER",
 ] as const;
 
-export default function TenantLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function TenantLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const dispatch = useDispatch();
@@ -66,8 +61,7 @@ export default function TenantLayout({
       return;
     }
     if (!tenantId) {
-      // sin tenant no rendereamos el árbol tenant (evita queries abajo)
-      router.replace("/dashboard"); // o "/login", a tu preferencia
+      router.replace("/dashboard"); // o "/login", según tu flujo
     }
   }, [isAuthed, tenantId, pathname, router]);
 
@@ -76,30 +70,14 @@ export default function TenantLayout({
     tenantId ? { id: tenantId } : skipToken
   );
 
-  const { data: branches, isFetching: loadingBranches } = useGetBranchesQuery(
-    tenantId ? { tenantId } : skipToken
-  );
-
   const tenantLabel = loadingTenant
     ? "Cargando…"
     : tenant?.name ?? tenantId ?? "—";
 
-  // ===== cambio de sucursal =====
-  const onSelectBranch = async (newBranchId: string) => {
-    // 1) persistencia en storage (headers x-branch-id para futuras requests)
-    setBranchId(newBranchId || null);
-    // 2) estado global (para guards, selects, etc.)
-    dispatch(
-      // sólo parcheamos branchId, no tocamos token/tenant/user
-      // (si usás setSession parcial, está OK)
-      // (si tu setSession no acepta parcial, cambialo a Partial<AuthSession>)
-      { type: "auth/setSession", payload: { branchId: newBranchId || null } }
-    );
-    // 3) limpiar cache RTKQ para que todo recargue con el nuevo branch
-    dispatch(baseApi.util.resetApiState());
-    // 4) refrescar vista actual
-    router.replace(pathname); // o router.refresh() si usás fetch server side
-  };
+  // ===== regla de cambio de sucursal (solo SUPER_ADMIN/ADMIN) =====
+  const canSwitchBranch = useMemo(() => {
+    return isAdminLike; // true solo para SUPER_ADMIN o ADMIN
+  }, [isAdminLike]);
 
   // ===== logout =====
   const logout = () => {
@@ -170,10 +148,11 @@ export default function TenantLayout({
                 tenantId={tenantId}
                 currentBranchId={branchId}
                 assignedBranchId={assignedBranchId}
-                canSwitch={isAdminLike}
-                hideWhenLocked={false} 
+                canSwitch={canSwitchBranch}   // 👈 solo ADMIN/SUPER_ADMIN
+                hideWhenLocked={false}
                 onChanged={() => {
-                  // opcional: router.replace(pathname) o router.refresh()
+                  // Refrescar la ruta actual para que el cambio impacte inmediatamente
+                  router.replace(pathname); // o router.refresh() si usás SSR/fetch en server
                 }}
               />
             </div>
