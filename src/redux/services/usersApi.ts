@@ -52,7 +52,6 @@ export const usersApi = baseApi.injectEndpoints({
         const headers: Record<string, string> = {};
         const tenantId = (arg as any)?.tenantId;
         const branchId = (arg as any)?.branchId; // "ALL" | uuid
-        console.log({ tenantId, branchId });
         if (tenantId) headers["x-tenant-id"] = tenantId;
         if (branchId && branchId !== "ALL") headers["x-branch-id"] = branchId; // opcional
 

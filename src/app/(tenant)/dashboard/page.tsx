@@ -41,12 +41,10 @@ export default function TenantDashboardPage() {
 
   const queryArg = tenantId ? { tenantId, branchId: branchKey } : skipToken;
 
-  console.log({ queryArg });
   const { data: users = [], isLoading } = useListUsersQuery(queryArg as any, {
     refetchOnMountOrArgChange: true,
   });
 
-  console.log(users);
   // ---- Mensajes sin contexto
   if (!tenantId) {
     return (

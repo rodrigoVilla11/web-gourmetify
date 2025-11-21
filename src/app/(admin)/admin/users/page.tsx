@@ -38,7 +38,6 @@ export default function UsersPage() {
   const [role, setRole] = useState("MANAGER");
   const [branchId, setBranchId] = useState("");
 
-  console.log(error)
   const canCreate = name.trim() && email.trim() && password && tenantId;
 
   const add = async () => {
